@@ -2,18 +2,32 @@ package controller
 
 import (
 	"log"
-	"math/rand"
 	"strings"
+	"time"
 
 	"k8s.io/api/core/v1"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 )
 
+const (
+	LuckyPred        = "Lucky"
+	LuckyPredFailMsg = "Sorry, you're not lucky"
+)
+
+var predicatesFuncs = map[string]FitPredicate{
+	LuckyPred: LuckyPredicate,
+}
+
+type FitPredicate func(pod *v1.Pod, node v1.Node) (bool, []string, error)
+
+var predicatesSorted = []string{LuckyPred}
+
+// filter 根据扩展程序定义的预选规则来过滤节点
+// it's webhooked to pkg/scheduler/core/generic_scheduler.go#findNodesThatFit()
 func filter(args schedulerapi.ExtenderArgs) *schedulerapi.ExtenderFilterResult {
 	var filteredNodes []v1.Node
 	failedNodes := make(schedulerapi.FailedNodesMap)
 	pod := args.Pod
-	//遍历节点，按照一定规则进行筛选
 	for _, node := range args.Nodes.Items {
 		fits, failReasons, _ := podFitsOnNode(pod, node)
 		if fits {
@@ -28,26 +42,32 @@ func filter(args schedulerapi.ExtenderArgs) *schedulerapi.ExtenderFilterResult {
 			Items: filteredNodes,
 		},
 		FailedNodes: failedNodes,
-		Error: "",
+		Error:       "",
 	}
 
 	return &result
 }
 
 func podFitsOnNode(pod *v1.Pod, node v1.Node) (bool, []string, error) {
+	fits := true
 	var failReasons []string
+	for _, predicateKey := range predicatesSorted {
+		fit, failures, err := predicatesFuncs[predicateKey](pod, node)
+		if err != nil {
+			return false, nil, err
+		}
+		fits = fits && fit
+		failReasons = append(failReasons, failures...)
+	}
+	return fits, failReasons, nil
+}
 
-	judge := (rand.Intn(100)%6 == 2)
-
-	if judge {
-		log.Printf("pod %v/%v fits on node %v\n", pod.Name, pod.Namespace, node.Name)
+func LuckyPredicate(pod *v1.Pod, node v1.Node) (bool, []string, error) {
+	lucky := rand.Intn(4)==0
+	if lucky {
+		log.Printf("pod %v/%v is lucky to fit on node %v\n", pod.Name, pod.Namespace, node.Name)
 		return true, nil, nil
 	}
-	log.Printf("pod %v/%v does not fit on node %v\n", pod.Name, pod.Namespace, node.Name)
-
-	failures := "It's not fits on this node."
-	failReasons = append(failReasons, failures)
-
-	return false, failReasons, nil
-
+	log.Printf("pod %v/%v is unlucky to fit on node %v\n", pod.Name, pod.Namespace, node.Name)
+	return false, []string{LuckyPredFailMsg}, nil
 }
