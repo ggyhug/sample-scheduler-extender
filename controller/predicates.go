@@ -3,6 +3,7 @@ package controller
 import (
 	"log"
 	"strings"
+	"time"
 
 	"k8s.io/api/core/v1"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
@@ -62,7 +63,8 @@ func podFitsOnNode(pod *v1.Pod, node v1.Node) (bool, []string, error) {
 }
 
 func LuckyPredicate(pod *v1.Pod, node v1.Node) (bool, []string, error) {
-	lucky := rand.Intn(4)==0
+	time := time.Now().Second()
+	lucky:= second%2 == 0
 	if lucky {
 		log.Printf("pod %v/%v is lucky to fit on node %v\n", pod.Name, pod.Namespace, node.Name)
 		return true, nil, nil
