@@ -3,7 +3,6 @@ package controller
 import (
 	"log"
 	"strings"
-	"time"
 
 	"k8s.io/api/core/v1"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
